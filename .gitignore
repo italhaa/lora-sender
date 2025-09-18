@@ -1,5 +1,69 @@
+###############################################################################
+# STM32 / STM32CubeIDE C project .gitignore
+# Keeps sources, headers, startup, linker scripts, drivers, and .ioc tracked.
+# Excludes build artifacts, IDE metadata, OS/editor cruft, and backups.
+###############################################################################
+
+# Build directories and artifacts
+Debug/
+Release/
+build/
+out/
+Bin/
+Obj/
+
+# Object and intermediate files
+*.o
+*.obj
+*.d
+*.su
+*.cyclo
+*.mk
+*.dep
+
+# Binaries and images
+*.elf
+*.axf
+*.hex
+*.bin
+*.srec
+*.out
+*.map
+*.list
+*.lst
+*.lss
+
+# Generated makefiles from IDE builds
+**/subdir.mk
+**/objects.list
+**/objects.mk
+**/sources.mk
+**/makefile
+
+# IDE metadata (Eclipse/STM32CubeIDE)
+.settings/
+.cproject
+.project
+.mxproject
+.stm32cubeide/
+*.launch
+
+# VS Code project settings (optional to track)
+.vscode/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local backups or legacy files
+*.old
+
+# Project-specific files that should not be versioned
 Core/Inc/key.h
 Core/Src/key.c.old
 Core/Src/main_old.c.old
-Debug/
-.vscode
+
+# Note: Do NOT ignore linker scripts (*.ld) or the CubeMX .ioc file
+# e.g., STM32L476RGTX_FLASH.ld, STM32L476RGTX_RAM.ld, LR1121.v4.ioc remain tracked
