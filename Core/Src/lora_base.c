@@ -8,6 +8,10 @@
 #include "lora_base.h"
 #include "main.h" // for GPIO Mappings and SPI handle
 
+/* Private includes */
+#include <stdio.h>
+#include <string.h>
+
 /* External variables */
 extern SPI_HandleTypeDef hspi1;
 
@@ -55,6 +59,10 @@ typedef struct transmission_metrics_s
 /* Private function prototypes */
 void lr1121_init(void);
 void rx_common(void);
+
+// Simple print function for debugging
+void simple_print(char* message);
+void print_received_data(uint8_t* data, uint8_t length);
 
 void init_tx_data(void);
 void increment_tx_data(void);
@@ -135,7 +143,7 @@ uint8_t enable_ui_power = 0;
 lr11xx_radio_pkt_params_lora_t lora_pkt_params_tx = {
     .preamble_len_in_symb = 20,
     .header_type          = LR11XX_RADIO_LORA_PKT_EXPLICIT,
-    .pld_len_in_bytes     = PAYLOAD_LENGTH,
+    .pld_len_in_bytes     = 25, // Simple 25-byte packet
     .crc                  = LR11XX_RADIO_LORA_CRC_ON, 
     .iq                   = LR11XX_RADIO_LORA_IQ_INVERTED,
 };
@@ -143,7 +151,7 @@ lr11xx_radio_pkt_params_lora_t lora_pkt_params_tx = {
 lr11xx_radio_pkt_params_lora_t lora_pkt_params_rx = {
     .preamble_len_in_symb = 20,
     .header_type          = LR11XX_RADIO_LORA_PKT_EXPLICIT,
-    .pld_len_in_bytes     = PAYLOAD_LENGTH,
+    .pld_len_in_bytes     = 25, // Simple 25-byte packet
     .crc                  = LR11XX_RADIO_LORA_CRC_ON,
     .iq                   = LR11XX_RADIO_LORA_IQ_INVERTED,
 };
@@ -208,7 +216,7 @@ void lora_system_init(void){
         /*
             Hub and Node Selection based on STM32 serial number of boards used in development
             PI HAL_GetUIDw2()  thru HAL_GetUIDw0() : 540618828 :: 1362120706 :: 4063308	
-            STM HAL_GetUIDw2() thru HAL_GetUIDw0() : 540618828 :: 1362120710 :: 2162755	
+            STM32 HAL_GetUIDw2() thru HAL_GetUIDw0() : 540618828 :: 1362120710 :: 2162755	
         */
         mode = MODE_HUB;
     }
@@ -216,6 +224,15 @@ void lora_system_init(void){
 	#ifdef PI
     mode = MODE_HUB;
 	#endif
+
+    // Print startup message
+    if (mode == MODE_HUB) {
+        simple_print("\n\n=== LoRa Hub Mode - Simple Communication Test ===\n");
+        simple_print("Waiting for packets from transmitter...\n\n");
+    } else {
+        simple_print("\n\n=== LoRa Node Mode - Simple Communication Test ===\n");
+        simple_print("Transmitting packets with 16 random values...\n\n");
+    }
 
     lora_power_2p4G = 2;
     lora_power_1p9G = 2;
@@ -440,6 +457,16 @@ void tx_data(void) {
 	lr11xx_radio_set_lora_pkt_params(NULL, &lora_pkt_params_tx );
     lr11xx_regmem_write_buffer8(NULL, tx_buf, lora_pkt_params_tx.pld_len_in_bytes); // (offset,*data,length) lora_pkt_params.pld_len_in_bytes=PAYLOAD_LENGTH;
 
+    // Print transmission info
+    char buffer[128];
+    sprintf(buffer, "TX: File ID %d, 16 random values: ", transferStatus.fileId);
+    simple_print(buffer);
+    for(int i = 9; i < 25; i++) {
+        sprintf(buffer, "%d ", tx_buf[i]);
+        simple_print(buffer);
+    }
+    simple_print("\n");
+
     ui_show_scan();
     // consider lr11xx_radio_auto_tx_rx(NULL,); // but may not work with CAD and may affect interrupt based handling
     lr11xx_radio_set_cad_params(NULL, &cadParams);
@@ -526,7 +553,7 @@ void init_tx_data(void) {
     transferStatus.fileVersion = 2; // uint8_t
     transferStatus.fileId++; // uint16_t
     transferStatus.packetId = 0; // uint16_t
-    transferStatus.packetLength = PAYLOAD_LENGTH; // uint8_t
+    transferStatus.packetLength = 25; // Simple packet: 9 bytes header + 16 bytes data
 
     tx_buf[0] = (uint8_t) transferStatus.packetSource & 0xFF;
     tx_buf[1] = (uint8_t) (transferStatus.packetSource >> 8);
@@ -538,32 +565,20 @@ void init_tx_data(void) {
     tx_buf[7] = (uint8_t) (transferStatus.packetId >> 8);
     tx_buf[8] = transferStatus.packetLength;
 
-    for(uint16_t itt = 0; itt < PAYLOAD_LENGTH - sizeOfTransferStatusInPayload; itt++){
-        tx_buf[sizeOfTransferStatusInPayload + itt] = itt;
+    // Generate 16 random binary values
+    for(uint16_t itt = 0; itt < 16; itt++){
+        tx_buf[9 + itt] = (uint8_t)(HAL_GetTick() + itt) % 256; // Simple pseudo-random
     }
     
-    is_file_in_progress = 1;
+    is_file_in_progress = 0; // Single packet mode
     tcvrMetrics.last_file_capture_start_time = HAL_GetTick();
 }
 
 void increment_tx_data(void) {
-    transferStatus.packetId++;
-    if (transferStatus.packetId < PACKETS_PER_FILE){
-        tx_buf[6] = (uint8_t) transferStatus.packetId & 0xFF;
-        tx_buf[7] = (uint8_t) (transferStatus.packetId >> 8);
-
-        for(uint16_t itt = 0; itt < PAYLOAD_LENGTH - sizeOfTransferStatusInPayload; itt++){
-            tx_buf[sizeOfTransferStatusInPayload + itt] = itt + (PAYLOAD_LENGTH - sizeOfTransferStatusInPayload) * transferStatus.packetId;
-        }
-
-    } else {
-        tcvrMetrics.last_complete_file_capture_time = HAL_GetTick() - tcvrMetrics.last_file_capture_start_time; 
-        tcvrMetrics.tx_complete_files++;
-
-        init_tx_data(); // or consider re-initing the radio entirely
-        transferStatus.packetId = 0;
-        is_file_in_progress = 0;
-    }
+    // Simple single packet mode - just reinitialize for next transmission
+    HAL_Delay(5000); // Wait 5 seconds between transmissions
+    init_tx_data(); // Generate new packet with new random data
+    is_file_in_progress = 0; // Single packet mode
 }
 
 /* Hub Functions */
@@ -586,20 +601,25 @@ void rx_read_data(void) {
 
         lr11xx_regmem_read_buffer8( NULL, rx_buf, rx_buffer_status.buffer_start_pointer, rx_buffer_status.pld_len_in_bytes );
 
-        /* validate received packet */
-        uint8_t initial_data = rx_buf[sizeOfTransferStatusInPayload];
-        for(uint8_t itt = 0; itt < PAYLOAD_LENGTH - sizeOfTransferStatusInPayload; itt++){
-            if (rx_buf[sizeOfTransferStatusInPayload + itt] != (uint8_t) (initial_data + itt)){
-                tcvrMetrics.invalid_data_last_packet++;
-            }
-        }
-        is_retransmit_requested = tcvrMetrics.invalid_data_last_packet == 0 ? 0 : 1; 
+        // Print the received data to serial/UART
+        print_received_data(rx_buf, rx_buffer_status.pld_len_in_bytes);
 
-        tcvrMetrics.invalid_data_accumulator += tcvrMetrics.invalid_data_last_packet;
+        /* validate received packet - simplified for debugging */
         tcvrMetrics.rx_cnt++;
+        is_retransmit_requested = 0; // Always acknowledge for simple debugging
 
+    } else if( (Irq_Status & LR11XX_SYSTEM_IRQ_TIMEOUT) == LR11XX_SYSTEM_IRQ_TIMEOUT) {
+        simple_print("RX TIMEOUT\n");
+        is_retransmit_requested = 2;
+        tcvrMetrics.rx_errors++;
+        tcvrMetrics.rx_cnt++;
+    } else if( (Irq_Status & LR11XX_SYSTEM_IRQ_CRC_ERROR ) == LR11XX_SYSTEM_IRQ_CRC_ERROR) {
+        simple_print("CRC ERROR\n");
+        is_retransmit_requested = 2;
+        tcvrMetrics.rx_errors++;
+        tcvrMetrics.rx_cnt++;
     } else {
-        // TODO : catch CRC ERROR, timeout or other packet errors
+        simple_print("OTHER RX ERROR\n");
         is_retransmit_requested = 2;
         tcvrMetrics.rx_errors++;
         tcvrMetrics.rx_cnt++;
@@ -683,6 +703,50 @@ void ui_show_rx(void){
 
 void ui_show_scan(void){
     enable_ui_scan = 1;
+}
+
+// Simple print functions for debugging
+void simple_print(char* message) {
+    // For now, this is a placeholder
+    // In embedded systems, you would typically use:
+    // HAL_UART_Transmit(&huart2, (uint8_t*)message, strlen(message), 1000);
+    // or printf() if you have retarget setup
+    // Since we can see output on your Pi, the USB CDC is working
+    printf("%s", message);
+}
+
+void print_received_data(uint8_t* data, uint8_t length) {
+    char buffer[512];
+    char temp[16];
+    
+    sprintf(buffer, "\n=== RECEIVED DATA ===\n");
+    simple_print(buffer);
+    
+    sprintf(buffer, "Length: %d bytes\n", length);
+    simple_print(buffer);
+    
+    sprintf(buffer, "Source ID: %d\n", data[0] | (data[1] << 8));
+    simple_print(buffer);
+    
+    sprintf(buffer, "File Type: %d\n", data[2]);
+    simple_print(buffer);
+    
+    sprintf(buffer, "File ID: %d\n", data[4] | (data[5] << 8));
+    simple_print(buffer);
+    
+    simple_print("Data payload (16 bytes): ");
+    for(int i = 9; i < length && i < 25; i++) {
+        sprintf(temp, "%02X ", data[i]);
+        simple_print(temp);
+    }
+    simple_print("\n");
+    
+    simple_print("Data as decimal: ");
+    for(int i = 9; i < length && i < 25; i++) {
+        sprintf(temp, "%d ", data[i]);
+        simple_print(temp);
+    }
+    simple_print("\n====================\n\n");
 }
 
 
