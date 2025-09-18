@@ -227,11 +227,20 @@ void lora_system_init(void){
 
     // Print startup message
     if (mode == MODE_HUB) {
-        simple_print("\n\n=== LoRa Hub Mode - Simple Communication Test ===\n");
-        simple_print("Waiting for packets from transmitter...\n\n");
+        simple_print("\n\n=== LoRa Hub Mode - Test Binary Data Receiver ===\n");
+        simple_print("Frequency: 2444 MHz (2.4GHz ISM band)\n");
+        simple_print("Waiting for test packets from transmitter...\n");
+        simple_print("Will display received binary patterns in HEX, DEC, and BIN formats\n\n");
     } else {
-        simple_print("\n\n=== LoRa Node Mode - Simple Communication Test ===\n");
-        simple_print("Transmitting packets with 16 random values...\n\n");
+        simple_print("\n\n=== LoRa Node Mode - Test Binary Data Transmitter ===\n");
+        simple_print("Frequency: 2444 MHz (2.4GHz ISM band)\n");  
+        simple_print("Transmitting test binary patterns:\n");
+        simple_print("- Pattern 0: Alternating 0xAA/0x55\n");
+        simple_print("- Pattern 1: Counting sequence\n");  
+        simple_print("- Pattern 2: Binary bit shift\n");
+        simple_print("- Pattern 3: XOR with timestamp\n");
+        simple_print("Each packet: 25 bytes (9 header + 16 data)\n");
+        simple_print("Press button to cycle power levels\n\n");
     }
 
     lora_power_2p4G = 2;
@@ -458,14 +467,35 @@ void tx_data(void) {
     lr11xx_regmem_write_buffer8(NULL, tx_buf, lora_pkt_params_tx.pld_len_in_bytes); // (offset,*data,length) lora_pkt_params.pld_len_in_bytes=PAYLOAD_LENGTH;
 
     // Print transmission info
-    char buffer[128];
-    sprintf(buffer, "TX: File ID %d, 16 random values: ", transferStatus.fileId);
+    char buffer[256];
+    sprintf(buffer, "\n=== TRANSMITTING TEST DATA ===\n");
+    simple_print(buffer);
+    sprintf(buffer, "File ID: %d, Packet ID: %d\n", transferStatus.fileId, transferStatus.packetId);
+    simple_print(buffer);
+    sprintf(buffer, "Binary test pattern (16 bytes):\n");
+    simple_print(buffer);
+    sprintf(buffer, "HEX: ");
     simple_print(buffer);
     for(int i = 9; i < 25; i++) {
-        sprintf(buffer, "%d ", tx_buf[i]);
+        sprintf(buffer, "%02X ", tx_buf[i]);
         simple_print(buffer);
     }
-    simple_print("\n");
+    sprintf(buffer, "\nDEC: ");
+    simple_print(buffer);
+    for(int i = 9; i < 25; i++) {
+        sprintf(buffer, "%03d ", tx_buf[i]);
+        simple_print(buffer);
+    }
+    sprintf(buffer, "\nBIN: ");
+    simple_print(buffer);
+    for(int i = 9; i < 25; i++) {
+        for(int bit = 7; bit >= 0; bit--) {
+            sprintf(buffer, "%d", (tx_buf[i] >> bit) & 1);
+            simple_print(buffer);
+        }
+        simple_print(" ");
+    }
+    simple_print("\n===============================\n");
 
     ui_show_scan();
     // consider lr11xx_radio_auto_tx_rx(NULL,); // but may not work with CAD and may affect interrupt based handling
@@ -565,9 +595,19 @@ void init_tx_data(void) {
     tx_buf[7] = (uint8_t) (transferStatus.packetId >> 8);
     tx_buf[8] = transferStatus.packetLength;
 
-    // Generate 16 random binary values
+    // Generate test binary string pattern
+    uint32_t seed = HAL_GetTick();
     for(uint16_t itt = 0; itt < 16; itt++){
-        tx_buf[9 + itt] = (uint8_t)(HAL_GetTick() + itt) % 256; // Simple pseudo-random
+        // Create a repeating binary pattern for easier testing
+        if (itt < 4) {
+            tx_buf[9 + itt] = 0xAA; // 10101010 pattern
+        } else if (itt < 8) {
+            tx_buf[9 + itt] = 0x55; // 01010101 pattern  
+        } else if (itt < 12) {
+            tx_buf[9 + itt] = 0xFF; // 11111111 pattern
+        } else {
+            tx_buf[9 + itt] = (uint8_t)(seed + itt) % 256; // Some variation
+        }
     }
     
     is_file_in_progress = 0; // Single packet mode
@@ -575,9 +615,32 @@ void init_tx_data(void) {
 }
 
 void increment_tx_data(void) {
-    // Simple single packet mode - just reinitialize for next transmission
-    HAL_Delay(5000); // Wait 5 seconds between transmissions
-    init_tx_data(); // Generate new packet with new random data
+    // Create different test patterns for consecutive transmissions
+    uint8_t pattern_type = transferStatus.fileId % 4;
+    
+    // Keep the same header, just change the data pattern
+    transferStatus.packetId = 0; // Reset for next transmission
+    
+    // Generate different binary test patterns based on transmission count
+    for(uint16_t itt = 0; itt < 16; itt++){
+        switch(pattern_type) {
+            case 0: // Alternating pattern
+                tx_buf[9 + itt] = (itt % 2 == 0) ? 0xAA : 0x55;
+                break;
+            case 1: // Counting pattern
+                tx_buf[9 + itt] = itt * 16;
+                break;
+            case 2: // Binary shift pattern
+                tx_buf[9 + itt] = 1 << (itt % 8);
+                break;
+            case 3: // XOR pattern with timestamp
+                tx_buf[9 + itt] = (uint8_t)((HAL_GetTick() + itt) ^ 0xC3);
+                break;
+        }
+    }
+    
+    simple_print("Pattern changed - waiting 3 seconds before next transmission...\n");
+    HAL_Delay(3000); // Wait 3 seconds between different pattern transmissions
     is_file_in_progress = 0; // Single packet mode
 }
 
