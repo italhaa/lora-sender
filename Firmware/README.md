@@ -1,40 +1,51 @@
-# STM32L476 LoRa Transmitter Firmware
+# STM32L476 LoRa Transmitter Firmware - ULTRA SIMPLE VERSION
 
 ## Flash Files
 
-- **LR1121.v4.hex** - Intel HEX format for most STM32 flash tools
-- **LR1121.v4.bin** - Raw binary format for ST-Link/OpenOCD
+- **LR1121.v4.hex** - Intel HEX format for most STM32 flash tools  
+- **LR1121.v4.bin** - Raw binary format for ST-Link/OpenOCD (13,936 bytes)
 - **LR1121.v4.elf** - ELF file with debug symbols for debugging
 
-## Test Binary Data Transmission
+## 🚀 SIMPLIFIED DESIGN - TRANSMIT ONLY!
 
-This firmware sends structured test patterns via LoRa at 2444 MHz:
+This version has been **dramatically simplified** from 800+ lines to ~180 lines:
 
-1. **Pattern 0**: Alternating 0xAA/0x55 (for basic connectivity testing)
-2. **Pattern 1**: Counting sequence 0, 16, 32, 48... (for data integrity)
-3. **Pattern 2**: Binary bit shift 0x01, 0x02, 0x04, 0x08... (for bit errors)
-4. **Pattern 3**: XOR with timestamp (for timing/sync testing)
+### ✅ **WHAT IT DOES:**
+- **Pure transmitter** - no RX, no responses, no complexity!
+- Sends 16-byte test patterns every 2 seconds
+- 4 cycling test patterns for comprehensive testing
+- Simple power level switching (5 levels: -10, -5, 0, +5, +10 dBm)
+- Clear debug output showing exactly what's transmitted
 
-Each packet is 25 bytes:
-- 9-byte header (source ID, file type/version, packet ID, length)
-- 16-byte test data payload
+### ❌ **WHAT WAS REMOVED:**
+- All RX/response handling (~300 lines)
+- Complex state machines and interrupt handling
+- Multi-mode (Hub/Node) architecture  
+- File transfer concepts and metrics
+- CAD (Channel Activity Detection)
+- Multi-frequency support (fixed to 2444 MHz)
+- Sleep mode management
 
-## Flashing Instructions
+## Test Patterns
 
-### Using ST-Link Utility:
-1. Connect ST-Link to STM32L476
-2. Open ST-Link Utility
-3. Load `LR1121.v4.hex` 
-4. Click "Program & Verify"
+Each transmission cycles through these 16-byte patterns:
 
-### Using STM32CubeProgrammer:
-1. Connect via ST-Link
-2. Load `LR1121.v4.hex`
-3. Download to target
+1. **Pattern 0**: `AA 55 AA 55 AA 55 AA 55 AA 55 AA 55 AA 55 AA 55`
+2. **Pattern 1**: `00 10 20 30 40 50 60 70 80 90 A0 B0 C0 D0 E0 F0`  
+3. **Pattern 2**: `01 02 04 08 10 20 40 80 01 02 04 08 10 20 40 80`
+4. **Pattern 3**: `[timestamp-based varying pattern]`
 
-### Using OpenOCD (command line):
-```bash
-openocd -f interface/stlink.cfg -f target/stm32l4x.cfg -c "program LR1121.v4.elf verify reset exit"
+## How It Works
+
+```c
+// Ultra-simple main loop:
+void lora_system_process(void) {
+    if (!initialized) simple_lora_init();     // One-time init
+    generate_test_pattern(pattern_counter);   // Make test data
+    simple_transmit();                        // Send it!
+    pattern_counter++;                        // Next pattern
+    HAL_Delay(2000);                         // Wait 2 seconds
+}
 ```
 
 ## Hardware Requirements
@@ -43,19 +54,23 @@ openocd -f interface/stlink.cfg -f target/stm32l4x.cfg -c "program LR1121.v4.elf
 - LR1121 LoRa transceiver 
 - 2.4 GHz antenna
 - Push button for power level cycling
-- LEDs for TX/RX/SCAN status indication
-
-## Debug Output
-
-Connect UART2 (PA2/PA3) at 115200 baud to see:
-- Startup mode identification
-- Transmission details with HEX/DEC/BIN data
-- Pattern cycle information
-- Power level changes
+- LEDs for TX status indication
 
 ## Build Information
 
-- Compiler: ARM GCC 14.2.1
-- Optimization: -Os (size optimized)
-- Flash size: ~17KB
-- Built: September 18, 2025
+- **Simplified Code**: ~180 lines (vs 800+ original)
+- **Flash Size**: 13.9 KB (vs 17.8 KB original)
+- **RAM Usage**: Significantly reduced
+- **Complexity**: Ultra-simple, easy to understand
+- **Compiler**: ARM GCC 14.2.1
+- **Built**: September 18, 2025
+
+## Perfect For:
+
+✅ **Testing receiver development**  
+✅ **Learning LoRa basics**  
+✅ **Quick prototyping**  
+✅ **Range testing**  
+✅ **Understanding transmission patterns**
+
+This is the **cleanest, simplest LoRa transmitter possible** - perfect for getting started!
