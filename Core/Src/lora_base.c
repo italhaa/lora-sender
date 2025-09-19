@@ -75,7 +75,7 @@ void lora_system_init(void) {
     simple_print("\n=== SIMPLE LoRa Transmitter ===\n");
     simple_print("Frequency: 2444 MHz\n");
     simple_print("Packet Size: 16 bytes\n");
-    simple_print("Test Patterns: 4 types cycling\n");
+    simple_print("Message: Hello World + counter\n");
     simple_print("Press button to change power\n");
     simple_print("================================\n\n");
 }
@@ -162,48 +162,35 @@ static void simple_lora_init(void) {
 }
 
 /**
- * @brief Generate different test patterns for transmission
+ * @brief Generate "Hello World" message with packet counter
  */
 static void generate_test_pattern(uint8_t pattern_type) {
-    uint32_t timestamp = HAL_GetTick();
+    // Clear buffer first
+    memset(tx_buffer, 0, PACKET_SIZE);
     
-    switch (pattern_type) {
-        case 0: // Alternating pattern
-            for (int i = 0; i < PACKET_SIZE; i++) {
-                tx_buffer[i] = (i % 2 == 0) ? 0xAA : 0x55;
-            }
-            break;
-            
-        case 1: // Counting pattern
-            for (int i = 0; i < PACKET_SIZE; i++) {
-                tx_buffer[i] = i * 16;
-            }
-            break;
-            
-        case 2: // Bit shift pattern
-            for (int i = 0; i < PACKET_SIZE; i++) {
-                tx_buffer[i] = 1 << (i % 8);
-            }
-            break;
-            
-        case 3: // Timestamp-based pattern
-            for (int i = 0; i < PACKET_SIZE; i++) {
-                tx_buffer[i] = (timestamp + i) & 0xFF;
-            }
-            break;
-    }
+    // Create the message with packet counter
+    char message[PACKET_SIZE];
+    snprintf(message, PACKET_SIZE, "Hello World %d", packet_counter % 100);
+    
+    // Copy string to tx_buffer (will be null-terminated or truncated to fit)
+    strncpy((char*)tx_buffer, message, PACKET_SIZE - 1);
+    
+    // Ensure the last byte is null-terminated for safety
+    tx_buffer[PACKET_SIZE - 1] = '\0';
 }
 
 /**
  * @brief Transmit the data - SIMPLE!
  */
 static void simple_transmit(void) {
-    // Print what we're sending
+    // Print what we're sending as string
     char buffer[128];
-    sprintf(buffer, "TX #%lu Pattern %d: ", packet_counter, pattern_counter % 4);
+    sprintf(buffer, "TX #%lu Message: \"%s\"\n", packet_counter, (char*)tx_buffer);
     simple_print(buffer);
     
-    // Show data in hex
+    // Also show data in hex for debugging
+    sprintf(buffer, "TX #%lu Binary: ", packet_counter);
+    simple_print(buffer);
     for (int i = 0; i < PACKET_SIZE; i++) {
         sprintf(buffer, "%02X ", tx_buffer[i]);
         simple_print(buffer);
